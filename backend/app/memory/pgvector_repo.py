@@ -1,4 +1,5 @@
 from typing import List
+from sqlalchemy import select
 from ..api.schemas import MemoryDTO, CreateMemoryDTO
 from .base import BaseMemoryStore
 from .models import Memory 
@@ -8,11 +9,11 @@ class PostgresMemoryStore(BaseMemoryStore):
     def __init__(self, session_factory):
         self._session_factory = session_factory
 
-    def save(self, memory: CreateMemoryDTO) -> None:
-        with self._session_factory() as db:
+    async def save(self, memory: CreateMemoryDTO) -> None:
+        
+        async with self._session_factory() as db:
             emb = embed_text(memory.content)
             
-            # Map Pydantic Input -> SQLAlchemy Table
             db_mem = Memory(
                 in_game_day=memory.day,
                 time_slot=memory.time,
@@ -25,27 +26,33 @@ class PostgresMemoryStore(BaseMemoryStore):
                 embedding=emb
             )
             db.add(db_mem)
-            db.commit()
+            
+            await db.commit()
 
-    def fetch_recent(self, *, day: int, limit: int = 20) -> List[MemoryDTO]:
-        with self._session_factory() as db:
-            rows = (
-                db.query(Memory)
-                  .filter(Memory.in_game_day <= day)
-                  .order_by(Memory.in_game_day.desc(), Memory.time_slot.desc())
-                  .limit(limit)
-                  .all()
+    async def fetch_recent(self, *, day: int, limit: int = 20) -> List[MemoryDTO]:
+        async with self._session_factory() as db:
+            
+            stmt = (
+                select(Memory)
+                .filter(Memory.in_game_day <= day)
+                .order_by(Memory.in_game_day.desc(), Memory.time_slot.desc())
+                .limit(limit)
             )
-            # MAGIC: Convert SQL Object -> Pydantic DTO safely
+            
+            result = await db.execute(stmt)
+            rows = result.scalars().all()
+            
             return [MemoryDTO.model_validate(row) for row in rows]
 
-    def fetch_similar(self, *, query: str, limit: int = 10) -> List[MemoryDTO]:
-        with self._session_factory() as db:
+    async def fetch_similar(self, *, query: str, limit: int = 10) -> List[MemoryDTO]:
+        async with self._session_factory() as db:
             q_emb = embed_text(query)
-            rows = (
-                db.query(Memory)
-                  .order_by(Memory.embedding.l2_distance(q_emb))
-                  .limit(limit)
-                  .all()
+            stmt = (
+                select(Memory)
+                .order_by(Memory.embedding.l2_distance(q_emb))
+                .limit(limit)
             )
+            result = await db.execute(stmt)
+            rows = result.scalars().all()
+            
             return [MemoryDTO.model_validate(row) for row in rows]
