@@ -2,7 +2,7 @@
 
 
 # paprika_agent_backend/api/schemas.py
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict # Import ConfigDict
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
@@ -23,8 +23,7 @@ class MemoryDTO(BaseModel):
     created_at: datetime
     
     # Allows mapping from SQLAlchemy object to Pydantic automatically
-    class Config:
-        from_attributes = True 
+    model_config = ConfigDict(from_attributes=True)
 
 class CreateMemoryDTO(BaseModel):
     """
