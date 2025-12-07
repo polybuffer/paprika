@@ -1,0 +1,65 @@
+name: Backend Tests
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'backend/**'  # Only run when backend files change
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    # Set the working directory for all 'run' commands
+    defaults:
+      run:
+        working-directory: ./backend
+
+    # Define a Service Container (The DB) for the runner to talk to
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: paprika_ai
+        # Map port 5432 on container to 5432 on runner
+        ports:
+          - 5432:5432
+        # Simple health check to wait for DB to be ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: uv sync
+
+      - name: Run Tests
+        # We define the DB connection string as an Env Var here
+        env:
+          # Note: Host is 'localhost' because we mapped ports in services
+          DATABASE_URL: postgresql+asyncpg://admin:password@localhost:5432/paprika_ai
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # Add this to GitHub Secrets later
+        run: |
+          # If you haven't renamed test_db.py to test_something.py, do so, or point explicitly
+          uv run pytest
