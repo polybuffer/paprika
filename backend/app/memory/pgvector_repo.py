@@ -38,7 +38,6 @@ class PostgresMemoryStore(BaseMemoryStore):
                 .order_by(Memory.in_game_day.desc(), Memory.time_slot.desc())
                 .limit(limit)
             )
-            
             result = await db.execute(stmt)
             rows = result.scalars().all()
             
